@@ -60,7 +60,7 @@ runs:
         echo "$DECODED" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
         
-        echo " Configuration validated"
+        echo " Configuration validated"
     
     - name: Apply with npx extend-env-files
       if: inputs.overlay_dir != ''
@@ -71,7 +71,7 @@ runs:
       run: |
         echo "=' Applying configuration with extend-env-files..."
         npx extend-env-files
-        echo " Configuration applied"
+        echo " Configuration applied"
     
     - name: Apply to specific file
       id: apply
@@ -98,7 +98,7 @@ runs:
         done
         
         echo "files=$ENV_FILE" >> $GITHUB_OUTPUT
-        echo " Configuration applied to $ENV_FILE"
+        echo " Configuration applied to $ENV_FILE"
     
     - name: Show changes
       shell: bash
