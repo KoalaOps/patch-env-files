@@ -1,5 +1,5 @@
-name: 'Apply Runtime Config'
-description: 'Apply runtime configuration overrides to environment files'
+name: 'Patch Env Files'
+description: 'Patch environment files with configuration values from JSON'
 author: 'KoalaOps'
 
 branding:
@@ -41,10 +41,10 @@ runs:
         
         # Check if it's base64 encoded
         if echo "$CONFIG" | base64 -d >/dev/null 2>&1; then
-          echo "=æ Decoding base64 configuration..."
+          echo "=ï¿½ Decoding base64 configuration..."
           DECODED=$(echo "$CONFIG" | base64 -d)
         else
-          echo "=Ë Using plain JSON configuration..."
+          echo "=ï¿½ Using plain JSON configuration..."
           DECODED="$CONFIG"
         fi
         
@@ -104,5 +104,5 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
-        echo "=Ý Configuration changes:"
+        echo "=ï¿½ Configuration changes:"
         echo "${{ steps.decode.outputs.config }}" | jq -r 'to_entries[] | "  \(.key) = \(.value)"'

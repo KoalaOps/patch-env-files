@@ -1,14 +1,14 @@
-# Apply Runtime Config
+# Patch Env Files
 
-Applies runtime configuration overrides to Kubernetes manifests, typically used for environment-specific settings.
+Patches environment files (.env) with configuration values from JSON, typically used for runtime configuration overrides.
 
 ## Features
 
-- 🔧 **Runtime overrides** - Apply config without rebuilding
+- 🔧 **Environment patching** - Update .env files with new values
 - 📝 **Base64 support** - Handles encoded JSON configs
 - 🎯 **Targeted updates** - Updates specific overlay directories
 - 🔄 **Environment variables** - Inject runtime values
-- 📦 **ConfigMap/Secret updates** - Modify K8s configs
+- 📦 **Key-value updates** - Add or override environment variables
 
 ## Prerequisites
 
@@ -17,8 +17,8 @@ When using `overlay_dir`, this action requires `npx` (Node.js) to be available i
 ## Usage
 
 ```yaml
-- name: Apply runtime configuration
-  uses: KoalaOps/apply-runtime-config@v1
+- name: Patch environment files
+  uses: KoalaOps/patch-env-files@v1
   with:
     config: ${{ inputs.runtime_overrides_b64 }}
     env_file: .env
@@ -29,7 +29,7 @@ When using `overlay_dir`, this action requires `npx` (Node.js) to be available i
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `working_directory` | Working directory | ❌ | '.' |
-| `config` | Runtime config (base64 encoded JSON or plain JSON) | ✅ | - |
+| `config` | Configuration values (base64 encoded JSON or plain JSON) | ✅ | - |
 | `overlay_dir` | Overlay directory containing .env files (requires npx) | ❌ | - |
 | `env_file` | Specific env file to update | ❌ | '.env' |
 
@@ -53,18 +53,18 @@ Simple key-value JSON object:
 
 ## Examples
 
-### Basic Runtime Override
+### Basic Environment Patching
 ```yaml
-- name: Apply production config
-  uses: KoalaOps/apply-runtime-config@v1
+- name: Patch production environment
+  uses: KoalaOps/patch-env-files@v1
   with:
     config: ${{ secrets.PROD_CONFIG_B64 }}
     env_file: .env
 ```
 
-### With Dynamic Values
+### Patching with Dynamic Values
 ```yaml
-- name: Generate runtime config
+- name: Generate patch config
   id: config
   run: |
     CONFIG=$(cat <<EOF | base64 -w0
@@ -77,8 +77,8 @@ Simple key-value JSON object:
     )
     echo "config=$CONFIG" >> $GITHUB_OUTPUT
 
-- name: Apply config
-  uses: KoalaOps/apply-runtime-config@v1
+- name: Patch env file
+  uses: KoalaOps/patch-env-files@v1
   with:
     config: ${{ steps.config.outputs.config }}
     env_file: .env
@@ -86,8 +86,8 @@ Simple key-value JSON object:
 
 ### Using overlay_dir with extend-env-files
 ```yaml
-- name: Apply config to overlay
-  uses: KoalaOps/apply-runtime-config@v1
+- name: Patch overlay env files
+  uses: KoalaOps/patch-env-files@v1
   with:
     config: ${{ inputs.app_config_b64 }}
     overlay_dir: deploy/overlays/production
@@ -95,9 +95,9 @@ Simple key-value JSON object:
 
 ### Conditional Application
 ```yaml
-- name: Apply runtime overrides if provided
+- name: Patch env file if config provided
   if: inputs.runtime_overrides_b64 != ''
-  uses: KoalaOps/apply-runtime-config@v1
+  uses: KoalaOps/patch-env-files@v1
   with:
     config: ${{ inputs.runtime_overrides_b64 }}
     env_file: .env
@@ -107,7 +107,7 @@ Simple key-value JSON object:
 
 1. Decodes base64 configuration (if encoded)
 2. Parses JSON key-value pairs  
-3. Applies configuration using one of two methods:
+3. Patches environment files using one of two methods:
    - **overlay_dir**: Uses `npx extend-env-files` to update .env files
    - **env_file**: Directly updates specified .env file with key-value pairs
 
