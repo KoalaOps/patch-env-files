@@ -62,8 +62,8 @@ runs:
         PATCHES='${{ steps.decode.outputs.patches }}'
         UPDATED_FILES=""
         
-        # Process each file and its patches
-        echo "$PATCHES" | jq -r 'to_entries[] | @json' | while read -r entry; do
+        # Process each file and its patches (using process substitution to avoid subshell)
+        while IFS= read -r entry; do
           FILE_PATH=$(echo "$entry" | jq -r '.key')
           FILE_PATCHES=$(echo "$entry" | jq -r '.value')
           
@@ -82,12 +82,8 @@ runs:
             echo "  Created new file: $FILE_PATH"
           fi
           
-          # Track changes for summary
-          ADDED_KEYS=""
-          UPDATED_KEYS=""
-          
-          # Apply each key-value pair
-          echo "$FILE_PATCHES" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
+          # Apply each key-value pair (using process substitution here too)
+          while IFS='=' read -r key value; do
             # Escape special characters for sed
             escaped_key=$(echo "$key" | sed 's/[[\.*^$()+?{|]/\\&/g')
             
@@ -101,7 +97,7 @@ runs:
             
             # Add new value
             echo "$key=$value" >> "$FILE_PATH"
-          done
+          done < <(echo "$FILE_PATCHES" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
           
           # Track updated files
           if [ -z "$UPDATED_FILES" ]; then
@@ -109,7 +105,7 @@ runs:
           else
             UPDATED_FILES="$UPDATED_FILES,$FILE_PATH"
           fi
-        done
+        done < <(echo "$PATCHES" | jq -r 'to_entries[] | @json')
         
         echo "files=$UPDATED_FILES" >> $GITHUB_OUTPUT
         echo "✓ Patches applied successfully"
