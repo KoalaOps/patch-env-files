@@ -1,119 +1,147 @@
 # Patch Env Files
 
-Patches environment files (.env) with configuration values from JSON, typically used for runtime configuration overrides.
+Patches environment files (.env) with configuration values from JSON, supporting both single and multiple file updates.
 
 ## Features
 
-- 🔧 **Environment patching** - Update .env files with new values
-- 📝 **Base64 support** - Handles encoded JSON configs
-- 🎯 **Targeted updates** - Updates specific overlay directories
-- 🔄 **Environment variables** - Inject runtime values
-- 📦 **Key-value updates** - Add or override environment variables
-
-## Prerequisites
-
-When using `overlay_dir`, this action requires `npx` (Node.js) to be available in the runner environment. This is available by default on GitHub-hosted runners, but may need to be installed in custom Docker containers.
+- 🔧 **Flexible patching** - Update one or multiple .env files in a single action
+- 📝 **Base64 support** - Handles encoded JSON patches
+- 🎯 **Precise updates** - Add new or override existing environment variables
+- 📁 **Auto-create** - Creates files and directories as needed
+- 🔄 **Idempotent** - Safe to run multiple times
 
 ## Usage
 
+### Single file patching
 ```yaml
-- name: Patch environment files
+- name: Patch .env file
   uses: KoalaOps/patch-env-files@v1
   with:
-    config: ${{ inputs.runtime_overrides_b64 }}
-    env_file: .env
+    patches: |
+      {
+        ".env": {
+          "API_KEY": "${{ secrets.API_KEY }}",
+          "DEBUG": "true"
+        }
+      }
+```
+
+### Multiple files patching
+```yaml
+- name: Patch multiple env files
+  uses: KoalaOps/patch-env-files@v1
+  with:
+    patches: |
+      {
+        ".env": {
+          "APP_ENV": "production"
+        },
+        "backend/.env": {
+          "DATABASE_URL": "${{ secrets.DB_URL }}",
+          "PORT": "3000"
+        },
+        "frontend/.env": {
+          "REACT_APP_API_URL": "https://api.example.com"
+        }
+      }
+```
+
+### With base64 encoded patches
+```yaml
+- name: Patch with base64 config
+  uses: KoalaOps/patch-env-files@v1
+  with:
+    patches: ${{ secrets.ENV_PATCHES_B64 }}
 ```
 
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `working_directory` | Working directory | ❌ | '.' |
-| `config` | Configuration values (base64 encoded JSON or plain JSON) | ✅ | - |
-| `overlay_dir` | Overlay directory containing .env files (requires npx) | ❌ | - |
-| `env_file` | Specific env file to update | ❌ | '.env' |
+| `path` | Working directory path | ❌ | '.' |
+| `patches` | JSON object mapping file paths to key-value pairs (can be base64 encoded) | ✅ | - |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `config_json` | Decoded configuration as JSON |
-| `updated_files` | List of updated files |
+| `updated_files` | Comma-separated list of updated files |
 
-## Configuration Format
+## Patches Format
 
-Simple key-value JSON object:
+JSON object mapping file paths to their key-value patches:
 ```json
 {
-  "API_URL": "https://api.production.example.com",
-  "LOG_LEVEL": "info",
-  "FEATURE_FLAGS": "new-ui,analytics"
+  ".env": {
+    "API_URL": "https://api.production.example.com",
+    "LOG_LEVEL": "info"
+  },
+  "backend/.env": {
+    "DATABASE_URL": "postgresql://...",
+    "REDIS_URL": "redis://..."
+  }
 }
 ```
 
 ## Examples
 
-### Basic Environment Patching
+### Dynamic version injection
 ```yaml
-- name: Patch production environment
+- name: Inject build metadata
   uses: KoalaOps/patch-env-files@v1
   with:
-    config: ${{ secrets.PROD_CONFIG_B64 }}
-    env_file: .env
+    patches: |
+      {
+        ".env": {
+          "VERSION": "${{ github.sha }}",
+          "BUILD_TIME": "${{ github.event.head_commit.timestamp }}",
+          "DEPLOYED_BY": "${{ github.actor }}"
+        }
+      }
 ```
 
-### Patching with Dynamic Values
+### Environment-specific configuration
 ```yaml
-- name: Generate patch config
-  id: config
-  run: |
-    CONFIG=$(cat <<EOF | base64 -w0
-    {
-      "VERSION": "${{ github.sha }}",
-      "DEPLOY_TIME": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-      "DEPLOYED_BY": "${{ github.actor }}"
-    }
-    EOF
-    )
-    echo "config=$CONFIG" >> $GITHUB_OUTPUT
-
-- name: Patch env file
+- name: Apply environment config
   uses: KoalaOps/patch-env-files@v1
   with:
-    config: ${{ steps.config.outputs.config }}
-    env_file: .env
+    path: ./deploy
+    patches: |
+      {
+        "production/.env": {
+          "LOG_LEVEL": "error",
+          "CACHE_TTL": "3600"
+        },
+        "staging/.env": {
+          "LOG_LEVEL": "debug",
+          "CACHE_TTL": "60"
+        }
+      }
 ```
 
-### Using overlay_dir with extend-env-files
+### Conditional patching
 ```yaml
-- name: Patch overlay env files
+- name: Apply runtime overrides if provided
+  if: inputs.runtime_patches_b64 != ''
   uses: KoalaOps/patch-env-files@v1
   with:
-    config: ${{ inputs.app_config_b64 }}
-    overlay_dir: deploy/overlays/production
-```
-
-### Conditional Application
-```yaml
-- name: Patch env file if config provided
-  if: inputs.runtime_overrides_b64 != ''
-  uses: KoalaOps/patch-env-files@v1
-  with:
-    config: ${{ inputs.runtime_overrides_b64 }}
-    env_file: .env
+    patches: ${{ inputs.runtime_patches_b64 }}
 ```
 
 ## How It Works
 
-1. Decodes base64 configuration (if encoded)
-2. Parses JSON key-value pairs  
-3. Patches environment files using one of two methods:
-   - **overlay_dir**: Uses `npx extend-env-files` to update .env files
-   - **env_file**: Directly updates specified .env file with key-value pairs
+1. Decodes base64 patches (if encoded)
+2. Validates JSON structure
+3. For each file in the patches object:
+   - Creates the file if it doesn't exist
+   - Creates parent directories if needed
+   - Updates existing keys or adds new ones
+   - Preserves other keys in the file
 
 ## Notes
 
-- Supports both base64 encoded and plain JSON configuration
-- Validates JSON structure before applying  
-- When using `env_file`, creates backup files during updates
-- When using `overlay_dir`, relies on `extend-env-files` tool
+- Supports both base64 encoded and plain JSON patches
+- Files and directories are created automatically if they don't exist
+- Existing keys are updated in place, preserving file structure
+- Safe to run multiple times (idempotent operation)
+- No external dependencies required

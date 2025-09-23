@@ -1,0 +1,176 @@
+name: Test Patch Env Files Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-single-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test single file patching
+        uses: ./
+        with:
+          patches: |
+            {
+              ".env": {
+                "API_KEY": "test-api-key",
+                "DEBUG": "true",
+                "PORT": "3000"
+              }
+            }
+      
+      - name: Verify single file results
+        run: |
+          echo "Contents of .env:"
+          cat .env
+          
+          # Verify all keys are present
+          grep -q "API_KEY=test-api-key" .env || exit 1
+          grep -q "DEBUG=true" .env || exit 1
+          grep -q "PORT=3000" .env || exit 1
+          
+          echo "✓ Single file test passed"
+
+  test-multiple-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test multiple files patching
+        uses: ./
+        with:
+          patches: |
+            {
+              ".env": {
+                "APP_ENV": "production"
+              },
+              "backend/.env": {
+                "DATABASE_URL": "postgres://localhost/db",
+                "REDIS_URL": "redis://localhost:6379"
+              },
+              "frontend/.env": {
+                "REACT_APP_API_URL": "https://api.example.com"
+              }
+            }
+      
+      - name: Verify multiple files results
+        run: |
+          echo "Contents of .env:"
+          cat .env
+          echo "Contents of backend/.env:"
+          cat backend/.env
+          echo "Contents of frontend/.env:"
+          cat frontend/.env
+          
+          # Verify files and content
+          grep -q "APP_ENV=production" .env || exit 1
+          grep -q "DATABASE_URL=postgres://localhost/db" backend/.env || exit 1
+          grep -q "REDIS_URL=redis://localhost:6379" backend/.env || exit 1
+          grep -q "REACT_APP_API_URL=https://api.example.com" frontend/.env || exit 1
+          
+          echo "✓ Multiple files test passed"
+
+  test-base64-input:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create base64 encoded patches
+        id: encode
+        run: |
+          PATCHES=$(echo '{"test/.env": {"SECRET_KEY": "abc123", "FEATURE_FLAG": "enabled"}}' | base64 -w0)
+          echo "patches=$PATCHES" >> $GITHUB_OUTPUT
+      
+      - name: Test base64 patches
+        uses: ./
+        with:
+          patches: ${{ steps.encode.outputs.patches }}
+      
+      - name: Verify base64 results
+        run: |
+          echo "Contents of test/.env:"
+          cat test/.env
+          
+          grep -q "SECRET_KEY=abc123" test/.env || exit 1
+          grep -q "FEATURE_FLAG=enabled" test/.env || exit 1
+          
+          echo "✓ Base64 test passed"
+
+  test-update-existing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create existing env file
+        run: |
+          mkdir -p config
+          echo "OLD_KEY=old_value" > config/.env
+          echo "KEEP_KEY=keep_value" >> config/.env
+          echo "UPDATE_KEY=original" >> config/.env
+      
+      - name: Patch existing file
+        uses: ./
+        with:
+          path: config
+          patches: |
+            {
+              ".env": {
+                "UPDATE_KEY": "updated",
+                "NEW_KEY": "new_value"
+              }
+            }
+      
+      - name: Verify update results
+        run: |
+          echo "Contents of config/.env:"
+          cat config/.env
+          
+          # Should have old untouched key
+          grep -q "KEEP_KEY=keep_value" config/.env || exit 1
+          
+          # Should have updated key
+          grep -q "UPDATE_KEY=updated" config/.env || exit 1
+          
+          # Should have new key
+          grep -q "NEW_KEY=new_value" config/.env || exit 1
+          
+          # Should NOT have duplicate UPDATE_KEY
+          if [ $(grep -c "UPDATE_KEY=" config/.env) -ne 1 ]; then
+            echo "Error: Duplicate UPDATE_KEY found"
+            exit 1
+          fi
+          
+          echo "✓ Update existing file test passed"
+
+  test-output:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Patch files and capture output
+        id: patch
+        uses: ./
+        with:
+          patches: |
+            {
+              "app1/.env": {"KEY1": "val1"},
+              "app2/.env": {"KEY2": "val2"}
+            }
+      
+      - name: Verify output
+        run: |
+          echo "Updated files: ${{ steps.patch.outputs.updated_files }}"
+          
+          # Output should contain both files
+          if [[ "${{ steps.patch.outputs.updated_files }}" == *"app1/.env"* ]] && \
+             [[ "${{ steps.patch.outputs.updated_files }}" == *"app2/.env"* ]]; then
+            echo "✓ Output test passed"
+          else
+            echo "Error: Output doesn't contain expected files"
+            exit 1
+          fi

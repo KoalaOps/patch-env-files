@@ -7,102 +7,119 @@ branding:
   color: 'purple'
 
 inputs:
-  working_directory:
-    description: 'Working directory'
+  path:
+    description: 'Working directory path'
     required: false
     default: '.'
-  config:
-    description: 'Runtime config (base64 encoded JSON or plain JSON)'
+  patches:
+    description: 'JSON object mapping file paths to key-value pairs. Can be base64 encoded. Example: {".env": {"KEY": "value"}}'
     required: true
-  overlay_dir:
-    description: 'Overlay directory containing .env files'
-    required: false
-  env_file:
-    description: 'Specific env file to update'
-    required: false
-    default: '.env'
 
 outputs:
-  config_json:
-    description: 'Decoded configuration as JSON'
-    value: ${{ steps.decode.outputs.config }}
   updated_files:
-    description: 'List of updated files'
+    description: 'Comma-separated list of updated files'
     value: ${{ steps.apply.outputs.files }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Decode configuration
+    - name: Decode patches
       id: decode
       shell: bash
       run: |
-        CONFIG='${{ inputs.config }}'
+        PATCHES='${{ inputs.patches }}'
         
         # Check if it's base64 encoded
-        if echo "$CONFIG" | base64 -d >/dev/null 2>&1; then
-          echo "=� Decoding base64 configuration..."
-          DECODED=$(echo "$CONFIG" | base64 -d)
+        if echo "$PATCHES" | base64 -d >/dev/null 2>&1; then
+          echo "🔓 Decoding base64 patches..."
+          DECODED=$(echo "$PATCHES" | base64 -d)
         else
-          echo "=� Using plain JSON configuration..."
-          DECODED="$CONFIG"
+          echo "📋 Using plain JSON patches..."
+          DECODED="$PATCHES"
         fi
         
         # Validate JSON
         if ! echo "$DECODED" | jq empty 2>/dev/null; then
-          echo "::error::Invalid JSON configuration"
+          echo "::error::Invalid JSON patches"
           echo "$DECODED"
           exit 1
         fi
         
-        # Output decoded config
-        echo "config<<EOF" >> $GITHUB_OUTPUT
+        # Output decoded patches
+        echo "patches<<EOF" >> $GITHUB_OUTPUT
         echo "$DECODED" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
         
-        echo " Configuration validated"
+        echo "✓ Patches validated"
     
-    - name: Apply with npx extend-env-files
-      if: inputs.overlay_dir != ''
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}
-      env:
-        ENV_FILES_CONFIG: ${{ steps.decode.outputs.config }}
-      run: |
-        echo "=' Applying configuration with extend-env-files..."
-        npx extend-env-files
-        echo " Configuration applied"
-    
-    - name: Apply to specific file
+    - name: Apply patches to env files
       id: apply
-      if: inputs.overlay_dir == ''
       shell: bash
-      working-directory: ${{ inputs.working_directory }}
+      working-directory: ${{ inputs.path }}
       run: |
-        echo "=' Applying configuration to ${{ inputs.env_file }}..."
+        echo "🔧 Applying patches to environment files..."
         
-        CONFIG='${{ steps.decode.outputs.config }}'
-        ENV_FILE="${{ inputs.env_file }}"
+        PATCHES='${{ steps.decode.outputs.patches }}'
+        UPDATED_FILES=""
         
-        # Create env file if it doesn't exist
-        touch "$ENV_FILE"
-        
-        # Apply each key-value pair
-        echo "$CONFIG" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
-          # Remove existing key if present
-          sed -i.bak "/^$key=/d" "$ENV_FILE" && rm "${ENV_FILE}.bak" || true
+        # Process each file and its patches
+        echo "$PATCHES" | jq -r 'to_entries[] | @json' | while read -r entry; do
+          FILE_PATH=$(echo "$entry" | jq -r '.key')
+          FILE_PATCHES=$(echo "$entry" | jq -r '.value')
           
-          # Add new value
-          echo "$key=$value" >> "$ENV_FILE"
-          echo "  Set: $key"
+          echo "📝 Patching: $FILE_PATH"
+          
+          # Create parent directory if needed
+          DIR=$(dirname "$FILE_PATH")
+          if [ "$DIR" != "." ] && [ ! -d "$DIR" ]; then
+            mkdir -p "$DIR"
+            echo "  Created directory: $DIR"
+          fi
+          
+          # Create env file if it doesn't exist
+          if [ ! -f "$FILE_PATH" ]; then
+            touch "$FILE_PATH"
+            echo "  Created new file: $FILE_PATH"
+          fi
+          
+          # Track changes for summary
+          ADDED_KEYS=""
+          UPDATED_KEYS=""
+          
+          # Apply each key-value pair
+          echo "$FILE_PATCHES" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
+            # Escape special characters for sed
+            escaped_key=$(echo "$key" | sed 's/[[\.*^$()+?{|]/\\&/g')
+            
+            # Check if key exists and track change type
+            if grep -q "^${escaped_key}=" "$FILE_PATH"; then
+              sed -i.bak "/^${escaped_key}=/d" "$FILE_PATH" && rm "${FILE_PATH}.bak"
+              echo "  ✏️  Updated: $key"
+            else
+              echo "  ➕ Added: $key"
+            fi
+            
+            # Add new value
+            echo "$key=$value" >> "$FILE_PATH"
+          done
+          
+          # Track updated files
+          if [ -z "$UPDATED_FILES" ]; then
+            UPDATED_FILES="$FILE_PATH"
+          else
+            UPDATED_FILES="$UPDATED_FILES,$FILE_PATH"
+          fi
         done
         
-        echo "files=$ENV_FILE" >> $GITHUB_OUTPUT
-        echo " Configuration applied to $ENV_FILE"
+        echo "files=$UPDATED_FILES" >> $GITHUB_OUTPUT
+        echo "✓ Patches applied successfully"
     
-    - name: Show changes
+    - name: Show summary
       shell: bash
-      working-directory: ${{ inputs.working_directory }}
+      working-directory: ${{ inputs.path }}
       run: |
-        echo "=� Configuration changes:"
-        echo "${{ steps.decode.outputs.config }}" | jq -r 'to_entries[] | "  \(.key) = \(.value)"'
+        echo "📊 Summary of patches:"
+        echo "${{ steps.decode.outputs.patches }}" | jq -r '
+          to_entries[] |
+          "  📁 \(.key): \(.value | length) key(s) patched"
+        '
