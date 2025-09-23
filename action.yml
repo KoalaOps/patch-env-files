@@ -119,7 +119,7 @@ runs:
       working-directory: ${{ inputs.path }}
       run: |
         echo "📊 Summary of patches:"
-        echo "${{ steps.decode.outputs.patches }}" | jq -r '
+        echo '${{ steps.decode.outputs.patches }}' | jq -r '
           to_entries[] |
           "  📁 \(.key): \(.value | length) key(s) patched"
         '
