@@ -165,7 +165,7 @@ jobs:
       - name: Verify output
         run: |
           echo "Updated files: ${{ steps.patch.outputs.updated_files }}"
-          
+
           # Output should contain both files
           if [[ "${{ steps.patch.outputs.updated_files }}" == *"app1/.env"* ]] && \
              [[ "${{ steps.patch.outputs.updated_files }}" == *"app2/.env"* ]]; then
@@ -174,3 +174,62 @@ jobs:
             echo "Error: Output doesn't contain expected files"
             exit 1
           fi
+
+  test-key-only-lines:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create env file with key-only lines
+        run: |
+          mkdir -p test
+          cat > test/.env <<EOF
+          DATABASE_URL=postgres://localhost
+          SENTRY_RELEASE
+          API_KEY=secret123
+          FEATURE_FLAG
+          EOF
+
+          echo "Original test/.env:"
+          cat test/.env
+
+      - name: Patch file with key-only lines
+        uses: ./
+        with:
+          path: test
+          patches: |
+            {
+              ".env": {
+                "SENTRY_RELEASE": "v1.2.3",
+                "FEATURE_FLAG": "enabled",
+                "NEW_KEY": "new_value"
+              }
+            }
+
+      - name: Verify key-only lines are replaced, not duplicated
+        run: |
+          echo "Patched test/.env:"
+          cat test/.env
+
+          # SENTRY_RELEASE should appear exactly once with the new value
+          if [ $(grep -c "^SENTRY_RELEASE" test/.env) -ne 1 ]; then
+            echo "Error: SENTRY_RELEASE appears $(grep -c "^SENTRY_RELEASE" test/.env) times (expected 1)"
+            exit 1
+          fi
+          grep -q "^SENTRY_RELEASE=v1.2.3$" test/.env || exit 1
+
+          # FEATURE_FLAG should appear exactly once with the new value
+          if [ $(grep -c "^FEATURE_FLAG" test/.env) -ne 1 ]; then
+            echo "Error: FEATURE_FLAG appears $(grep -c "^FEATURE_FLAG" test/.env) times (expected 1)"
+            exit 1
+          fi
+          grep -q "^FEATURE_FLAG=enabled$" test/.env || exit 1
+
+          # Existing keys should still be present
+          grep -q "DATABASE_URL=postgres://localhost" test/.env || exit 1
+          grep -q "API_KEY=secret123" test/.env || exit 1
+
+          # New key should be added
+          grep -q "NEW_KEY=new_value" test/.env || exit 1
+
+          echo "✓ Key-only lines test passed"

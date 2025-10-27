@@ -88,8 +88,9 @@ runs:
             escaped_key=$(echo "$key" | sed 's/[[\.*^$()+?{|]/\\&/g')
             
             # Check if key exists and track change type
-            if grep -q "^${escaped_key}=" "$FILE_PATH"; then
-              sed -i.bak "/^${escaped_key}=/d" "$FILE_PATH" && rm "${FILE_PATH}.bak"
+            # Match both "KEY=value" and key-only "KEY" lines (with optional trailing whitespace)
+            if grep -q "^${escaped_key}\(=\|[[:space:]]*$\)" "$FILE_PATH"; then
+              sed -i.bak "/^${escaped_key}\(=\|[[:space:]]*$\)/d" "$FILE_PATH" && rm "${FILE_PATH}.bak"
               echo "  ✏️  Updated: $key"
             else
               echo "  ➕ Added: $key"
