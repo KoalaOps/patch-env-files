@@ -15,7 +15,7 @@ Patches environment files (.env) with configuration values from JSON, supporting
 ### Single file patching
 ```yaml
 - name: Patch .env file
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     patches: |
       {
@@ -29,7 +29,7 @@ Patches environment files (.env) with configuration values from JSON, supporting
 ### Multiple files patching
 ```yaml
 - name: Patch multiple env files
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     patches: |
       {
@@ -49,7 +49,7 @@ Patches environment files (.env) with configuration values from JSON, supporting
 ### With base64 encoded patches
 ```yaml
 - name: Patch with base64 config
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     patches: ${{ secrets.ENV_PATCHES_B64 }}
 ```
@@ -88,7 +88,7 @@ JSON object mapping file paths to their key-value patches:
 ### Dynamic version injection
 ```yaml
 - name: Inject build metadata
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     patches: |
       {
@@ -103,7 +103,7 @@ JSON object mapping file paths to their key-value patches:
 ### Environment-specific configuration
 ```yaml
 - name: Apply environment config
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     path: ./deploy
     patches: |
@@ -123,7 +123,7 @@ JSON object mapping file paths to their key-value patches:
 ```yaml
 - name: Apply runtime overrides if provided
   if: inputs.runtime_patches_b64 != ''
-  uses: KoalaOps/patch-env-files@v1
+  uses: skyhook-io/patch-env-files@v1
   with:
     patches: ${{ inputs.runtime_patches_b64 }}
 ```

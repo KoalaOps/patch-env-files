@@ -1,6 +1,6 @@
 name: 'Patch Env Files'
 description: 'Patch environment files with configuration values from JSON'
-author: 'KoalaOps'
+author: 'Skyhook'
 
 branding:
   icon: 'settings'
